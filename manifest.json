@@ -1,0 +1,41 @@
+{
+"update_url": "https://clients2.google.com/service/update2/crx",
+
+  "manifest_version": 3,
+  "name": "Smart Zetamac Coach",
+  "version": "1.0.0",
+  "description": "Analyze your Zetamac arithmetic performance and get personalized coaching to improve your mental math speed and accuracy.",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.zetamac.com/*",
+    "https://*.googleapis.com/*",
+    "https://*.gstatic.com/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Smart Zetamac Coach",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.zetamac.com/*"],
+      "js": ["content/inject.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "background": {
+    "service_worker": "background/index.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+} 
