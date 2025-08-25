@@ -1,5 +1,16 @@
 console.log("Popup loaded");
 
+// Import Firebase Functions
+import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js';
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+import { firebaseConfig } from '../config/firebase-config.js';
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const functions = getFunctions(app);
+
 async function createAnonymousUser(forceRefresh = false) {
   try {
     const storage = await chrome.storage.local.get(['authToken', 'userId']);
@@ -183,14 +194,72 @@ async function getRecentSessions() {
   }
 }
 
+// NEW: Use Firebase Functions to get comprehensive stats
+async function getUserStatsFromFunctions() {
+  try {
+    // Ensure we have valid authentication
+    const storage = await createAnonymousUser();
+    if (!storage) {
+      throw new Error("Failed to authenticate user");
+    }
+
+    // Sign in with Firebase Auth to get proper token for Functions
+    await signInAnonymously(auth);
+
+    // Call the Firebase Function
+    const getUserStats = httpsCallable(functions, 'getUserStats');
+    const result = await getUserStats({});
+    
+    return result.data;
+  } catch (error) {
+    console.error('Error getting user stats from Functions:', error);
+    
+    // Fallback to direct Firestore access
+    const sessions = await getRecentSessions();
+    return analyzeQuickStats(sessions);
+  }
+}
+
+// NEW: Archive old games using Firebase Functions
+async function archiveOldGames() {
+  try {
+    const storage = await createAnonymousUser();
+    if (!storage) {
+      throw new Error("Failed to authenticate user");
+    }
+
+    await signInAnonymously(auth);
+
+    const archiveGames = httpsCallable(functions, 'archiveGamesToSheets');
+    const result = await archiveGames({ 
+      daysOld: 30,  // Archive games older than 30 days
+      batchSize: 50 // Archive up to 50 games at once
+    });
+    
+    console.log('Archive result:', result.data);
+    return result.data;
+  } catch (error) {
+    console.error('Error archiving games:', error);
+    throw error;
+  }
+}
+
 function analyzeQuickStats(sessions) {
   if (sessions.length === 0) {
-    return null;
+    return {
+      recentScore: 0,
+      bestScore: 0,
+      totalGames: 0,
+      avgScore: 0,
+      slowestOperation: null,
+      recommendation: 'Start playing to see your stats!'
+    };
   }
 
   const recentScore = sessions[0].score;
   const bestScore = Math.max(...sessions.map(s => s.score));
-  const sessionCount = sessions.length;
+  const totalGames = sessions.length;
+  const avgScore = Math.round(sessions.reduce((sum, s) => sum + s.score, 0) / totalGames);
 
   let slowestOperation = null;
   if (sessions[0].problems.length > 0) {
@@ -222,9 +291,12 @@ function analyzeQuickStats(sessions) {
   return {
     recentScore,
     bestScore,
-    sessionCount,
+    totalGames,
+    avgScore,
     slowestOperation,
-    recommendation: slowestOperation ? `Focus on ${slowestOperation} practice to improve your speed` : 'Keep practicing to improve your mental math skills!'
+    recommendation: slowestOperation && slowestOperation !== 'unknown' 
+      ? `Focus on ${slowestOperation} practice to improve your speed` 
+      : 'Keep practicing to improve your mental math skills!'
   };
 }
 
@@ -233,19 +305,32 @@ async function loadPopupData() {
   const contentEl = document.getElementById('content');
   
   try {
-    await createAnonymousUser();
+    // Try to get stats from Firebase Functions (includes archived data)
+    const stats = await getUserStatsFromFunctions();
     
-    const sessions = await getRecentSessions();
-    const stats = analyzeQuickStats(sessions);
-    
-    if (stats) {
-      document.getElementById('recent-score').textContent = stats.recentScore;
-      document.getElementById('session-count').textContent = stats.sessionCount;
-      document.getElementById('best-score').textContent = stats.bestScore;
+    if (stats && stats.totalGames > 0) {
+      document.getElementById('recent-score').textContent = stats.recentScore || 0;
+      document.getElementById('session-count').textContent = stats.totalGames || 0;
+      document.getElementById('best-score').textContent = stats.bestScore || 0;
+      
+      // Add average score display
+      const avgScoreElement = document.getElementById('avg-score');
+      if (avgScoreElement) {
+        avgScoreElement.textContent = stats.avgScore || 0;
+      }
       
       if (stats.slowestOperation && stats.slowestOperation !== 'unknown') {
         document.getElementById('recommendation-text').textContent = stats.recommendation;
         document.getElementById('recommendation').style.display = 'block';
+      }
+
+      // Show archive info if available
+      if (stats.archivedGamesCount > 0) {
+        const archiveInfo = document.getElementById('archive-info');
+        if (archiveInfo) {
+          archiveInfo.textContent = `(${stats.archivedGamesCount} archived)`;
+          archiveInfo.style.display = 'inline';
+        }
       }
     } else {
       document.getElementById('recent-score').textContent = 'No data';
@@ -274,9 +359,32 @@ function setupButtons() {
       url: 'https://arithmetic.zetamac.com'
     });
   });
+
+  // NEW: Archive button
+  const archiveBtn = document.getElementById('archive-btn');
+  if (archiveBtn) {
+    archiveBtn.addEventListener('click', async () => {
+      const originalText = archiveBtn.textContent;
+      archiveBtn.textContent = 'Archiving...';
+      archiveBtn.disabled = true;
+      
+      try {
+        const result = await archiveOldGames();
+        alert(`Successfully archived ${result.archivedCount} old game sessions!`);
+        
+        // Refresh the popup data to show updated counts
+        await loadPopupData();
+      } catch (error) {
+        alert('Failed to archive games: ' + error.message);
+      } finally {
+        archiveBtn.textContent = originalText;
+        archiveBtn.disabled = false;
+      }
+    });
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   loadPopupData();
   setupButtons();
-}); 
+});
