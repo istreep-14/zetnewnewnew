@@ -49,6 +49,11 @@
       font-weight: bold;
       color: #333;
     }
+    .archive-info {
+      font-size: 11px;
+      color: #888;
+      display: none;
+    }
     .recommendation {
       background: #e3f2fd;
       border-radius: 8px;
@@ -92,6 +97,19 @@
     .button-secondary:hover {
       background-color: #f5f5f5;
     }
+    .button-archive {
+      background-color: #ff9800;
+      color: white;
+      font-size: 12px;
+      padding: 8px;
+    }
+    .button-archive:hover {
+      background-color: #f57c00;
+    }
+    .button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
     .loading {
       text-align: center;
       color: #666;
@@ -116,12 +134,19 @@
         <span class="stat-value" id="recent-score">-</span>
       </div>
       <div class="stat-item">
-        <span class="stat-label">Sessions:</span>
-        <span class="stat-value" id="session-count">-</span>
+        <span class="stat-label">Total Games:</span>
+        <span class="stat-value">
+          <span id="session-count">-</span>
+          <span id="archive-info" class="archive-info"></span>
+        </span>
       </div>
       <div class="stat-item">
         <span class="stat-label">Best Score:</span>
         <span class="stat-value" id="best-score">-</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Average Score:</span>
+        <span class="stat-value" id="avg-score">-</span>
       </div>
     </div>
     
@@ -136,6 +161,10 @@
     
     <button id="zetamac-btn" class="button button-secondary">
       Practice on Zetamac
+    </button>
+    
+    <button id="archive-btn" class="button button-archive">
+      Archive Old Games (30+ days)
     </button>
   </div>
   
